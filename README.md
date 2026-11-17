@@ -55,7 +55,7 @@ The container runs as uid 1000. If your `data` folder belongs to someone else, a
 
 ## Quick start (no Docker)
 
-Python 3.9 or newer, nothing to install:
+Python 3.10 or newer, nothing to install:
 
 ```bash
 cp .env.example .env        # edit it
