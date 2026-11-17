@@ -1,0 +1,4 @@
+*
+!shelfcull/
+shelfcull/__pycache__/
+**/*.pyc

@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Unit tests (fake Radarr / Sonarr / Plex)
+        run: python -W error::ResourceWarning -m unittest discover -s tests -v
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t shelfcull:ci .
+      - name: Start it and wait for the health check
+        run: |
+          docker run -d --name shelfcull -p 8765:8765 \
+            -e RADARR_URL=http://127.0.0.1:9 -e RADARR_API_KEY=ci -e AUTH_PASSWORD=ci shelfcull:ci
+          for i in $(seq 1 30); do
+            curl -fs http://127.0.0.1:8765/healthz && break
+            sleep 1
+          done
+          curl -fs http://127.0.0.1:8765/healthz
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -u admin:ci http://127.0.0.1:8765/)" = 200
+          docker exec shelfcull id -u | grep -qx 1000
+          docker logs shelfcull

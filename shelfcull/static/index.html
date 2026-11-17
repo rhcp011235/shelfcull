@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>shelfcull</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>shelfcull</h1>
+    <button class="chip" id="gridBtn">Browse</button>
+    <button class="chip" id="reviewBtn">Marked to delete: <b id="cnt">0</b></button>
+  </div>
+  <div class="filters" id="filters">
+    <select id="fLib" aria-label="Library"></select>
+    <select id="fPlay" aria-label="Played">
+      <option value="nobody">Never played by anyone</option>
+      <option value="me">Never played by me</option>
+      <option value="watched">Watched</option>
+      <option value="all">Everything</option>
+    </select>
+    <select id="fSort" aria-label="Order">
+      <option value="added">Longest in the library first</option>
+      <option value="watched">Most recently watched first</option>
+      <option value="size">Largest first</option>
+      <option value="yearOld">Oldest first</option>
+      <option value="yearNew">Newest first</option>
+      <option value="rating">Lowest rated first</option>
+      <option value="title">By title</option>
+    </select>
+    <input id="fSearch" type="search" placeholder="Search title" aria-label="Search title">
+  </div>
+</header>
+
+<main>
+  <div id="banner"></div>
+
+  <section id="pick">
+    <div class="nav"><button id="bPrev">&lsaquo; Previous</button><div class="progress" id="progress"></div><button id="bNext">Next &rsaquo;</button></div>
+    <div class="card" id="card"></div>
+    <div class="empty hide" id="done">Nothing found with these filters.</div>
+  </section>
+
+  <section id="grid" class="hide">
+    <div class="progress" id="gridInfo"></div>
+    <div class="wall" id="wall"></div>
+    <div id="more"></div>
+  </section>
+
+  <section id="review" class="hide">
+    <div class="tabs">
+      <button id="tabDel" class="on">Marked to delete</button>
+      <button id="tabKeep">Marked keep</button>
+      <button id="back">Back to the list</button>
+    </div>
+    <div id="runBox"></div>
+    <div class="list" id="list"></div>
+  </section>
+</main>
+
+<div class="bar" id="bar">
+  <div class="row" id="barRow">
+    <button class="b-del" id="bDel">Delete</button>
+    <button class="b-skip" id="bSkip">Skip</button>
+    <button class="b-seen" id="bSeen">Seen it</button>
+    <button class="b-keep" id="bKeep">Keep</button>
+  </div>
+  <div class="hint"><span>Keys: &larr; &rarr; look through &middot; D delete &middot; S skip &middot; W seen it &middot; K keep &middot; U undo</span><button id="bUndo">Undo last</button></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
