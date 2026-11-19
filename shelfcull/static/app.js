@@ -173,7 +173,9 @@ function runBox() {
 }
 
 function renderReview() {
-  $("tabDel").classList.toggle("on", tab === "delete"); $("tabKeep").classList.toggle("on", tab === "keep");
+  $("tabDel").classList.toggle("on", tab === "delete"); $("tabKeep").classList.toggle("on", tab === "keep"); $("tabImdb").classList.toggle("on", tab === "imdb");
+  $("imdbBox").classList.toggle("hide", tab !== "imdb"); $("runBox").classList.toggle("hide", tab === "imdb"); $("list").classList.toggle("hide", tab === "imdb");
+  if (tab === "imdb") return;
   runBox();
   const rows = Object.keys(dec).filter(k => dec[k].d === tab && !dec[k].done).sort((a, b) => (dec[b].at || 0) - (dec[a].at || 0));
   $("list").innerHTML = rows.length ? rows.map(k => {
@@ -206,7 +208,7 @@ function setupFilters() {
   $("fLib").innerHTML = h;
   $("fLib").classList.toggle("hide", instances.length < 2);
   $("fPlay").classList.toggle("hide", !hasPlex);
-  $("bSeen").classList.toggle("hide", !hasPlex);
+  $("bSeen").classList.toggle("hide", !hasPlex); $("tabImdb").classList.toggle("hide", !hasPlex);
   $("barRow").classList.toggle("three", !hasPlex);
   if (!hasPlex) [...$("fSort").options].forEach(o => { if (o.value === "watched") o.remove(); });
 }
@@ -223,6 +225,20 @@ $("card").addEventListener("touchend", e => {
   if (Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy)) step(dx < 0 ? 1 : -1);      // swipe left = next
 }, {passive: true});
 $("reviewBtn").onclick = () => { tab = "delete"; view("review"); };
+$("tabImdb").onclick = () => { tab = "imdb"; renderReview(); };
+$("imdbFile").onchange = () => { $("imdbGo").disabled = !$("imdbFile").files.length; $("imdbResult").innerHTML = ""; };
+$("imdbGo").onclick = async () => {
+  const file = $("imdbFile").files[0]; if (!file) return;
+  $("imdbGo").disabled = true;
+  try {
+    if (file.size > 6000000) throw new Error("that file is too large to be an IMDb export");
+    const r = (await api("imdb", {csv: await file.text(), ratedOnly: $("imdbRated").checked})).imported;
+    $("imdbResult").innerHTML = `<div class="msg good">${r.inFile.toLocaleString()} titles in the file, ${r.inLibrary.toLocaleString()} of them in your library: ` +
+      `${r.queued.toLocaleString()} will be marked as played in Plex within a minute, ${r.alreadyPlayed.toLocaleString()} were already played` +
+      `${r.notInPlex ? ", " + r.notInPlex.toLocaleString() + " are not in Plex" : ""}.</div>`;
+  } catch (e) { $("imdbResult").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+  $("imdbGo").disabled = false;
+};
 $("tabDel").onclick = () => { tab = "delete"; renderReview(); }; $("tabKeep").onclick = () => { tab = "keep"; renderReview(); }; $("back").onclick = () => view("pick");
 const refilter = () => { rebuild(); if (current === "grid") renderGrid(); };
 $("fPlay").onchange = () => { if ($("fPlay").value === "watched") $("fSort").value = "watched"; else if ($("fSort").value === "watched") $("fSort").value = "added"; refilter(); };

@@ -52,6 +52,8 @@ main{max-width:980px;margin:0 auto;padding:16px 16px 150px}
 .tile .cap span{color:var(--dim)}
 .tile .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:#4a2a27}
 .tile .dot.ok{background:var(--keep)}.tile .dot.del{background:var(--del)}
+#imdbBox input[type=file]{width:100%}
+#imdbBox label{cursor:pointer}
 .empty{text-align:center;color:var(--dim);padding:60px 10px}
 .hide{display:none!important}
 @media (max-width:700px){

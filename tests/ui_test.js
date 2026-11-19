@@ -9,7 +9,7 @@ const { chromium } = require(process.env.PLAYWRIGHT || 'playwright-core');
   for (const [label, vp] of [['desktop', { width: 1280, height: 900 }], ['phone', { width: 390, height: 844 }]]) {
     const ctx = await br.newContext({ viewport: vp, hasTouch: label === 'phone' }); const p = await ctx.newPage();
     p.on('pageerror', e => errs.push(label + ': ' + e.message));
-    p.on('console', m => { if (m.type() === 'error') errs.push(label + ' console: ' + m.text()); });
+    p.on('console', m => { if (m.type() === 'error' && !m.text().includes('400 (Bad Request)')) errs.push(label + ' console: ' + m.text()); });   // the refused import is a wanted 400
     p.on('dialog', d => d.accept());
     let posts = 0; p.on('request', r => { if (r.method() === 'POST') posts++; });
     await p.goto(base); await p.waitForSelector('.title');
@@ -60,6 +60,19 @@ const { chromium } = require(process.env.PLAYWRIGHT || 'playwright-core');
     ok(label + ': review lists the marked title', (await p.textContent('#list')).includes(d1) && (await p.textContent('#runBtn')).startsWith('Remove the 1 marked title now'));
     await p.click('#tabKeep'); await p.waitForFunction(() => document.querySelectorAll('#list .item').length >= 1);
     ok(label + ': Keep tab lists the kept title', true); await p.click('#tabDel');
+    // IMDb import
+    const pick = await p.evaluate(() => items.filter(f => f.kind === 'movie' && f.inplex && !f.full && f.imdb).slice(0, 2).map(f => [f.k, f.imdb]));
+    await p.click('#tabImdb'); await p.waitForSelector('#imdbBox:not(.hide)');
+    ok(label + ': the IMDb tab shows the import box, button off until a file is picked', await p.isDisabled('#imdbGo') && await p.isHidden('#runBox'));
+    await p.setInputFiles('#imdbFile', { name: 'ratings.csv', mimeType: 'text/csv', buffer: Buffer.from(`Const,Your Rating,Title\n${pick[0][1]},8,A\n${pick[1][1]},,B\ntt9999999,5,C\n`) });
+    await p.click('#imdbGo'); await p.waitForSelector('#imdbResult .msg');
+    ok(label + ': import reports what it found (rated only: 1 queued)', /2 titles in the file, [12] of them in your library: [12] will be marked/.test(await p.textContent('#imdbResult')));
+    const imp = await p.waitForFunction(async k => { const j = await (await fetch('api/items')).json(); const f = j.items.find(x => x.k === k); return f && f.full; }, pick[0][0], { timeout: 20000 }).then(() => true, () => false);
+    ok(label + ': the imported title is played in Plex; the unrated one is not', imp && await p.evaluate(async k => { const j = await (await fetch('api/items')).json(); return !j.items.find(x => x.k === k).full; }, pick[1][0]));
+    await p.setInputFiles('#imdbFile', { name: 'notes.csv', mimeType: 'text/csv', buffer: Buffer.from('Title,Year\nA,2001\n') });
+    await p.click('#imdbGo'); await p.waitForSelector('#imdbResult .msg.err');
+    ok(label + ': a file that is not an IMDb export is refused with a reason', (await p.textContent('#imdbResult')).includes('not an IMDb export'));
+    await p.click('#tabDel'); await p.waitForSelector('#runBtn');
     if (shots) await p.screenshot({ path: `${shots}/${label}-review.png` });
     await p.click('#runBtn');
     const finished = await p.waitForFunction(() => /Last run .*removed 1 title/.test(document.getElementById('runBox').textContent), null, { timeout: 30000 }).then(() => true, () => false);

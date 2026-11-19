@@ -7,7 +7,7 @@ One process, standard library only:
 
 Everything is configured with environment variables (see .env.example).
 """
-import base64, datetime, hmac, json, os, re, ssl, sys, threading, time, urllib.error, urllib.parse, urllib.request
+import base64, csv, datetime, hmac, io, json, os, re, ssl, sys, threading, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import __version__
@@ -82,7 +82,7 @@ def _instances(env, prefix, secret, letter, label):
         if not key:
             raise ConfigError(f"{p}{secret} is missing")
         name = env.get(p + "NAME", "").strip() or (label if len(found) == 1 else f"{label} {n}")
-        out.append({"id": f"{letter}{n}", "name": name[:40], "url": url, "key": key})
+        out.append({"id": f"{letter}{n}", "name": name[:40], "url": url, "key": key, "bin": env.get(p + "RECYCLE_BIN", "").strip()})
     return out
 
 
@@ -141,7 +141,7 @@ class Arr:
     """One Radarr (kind 'movie') or Sonarr (kind 'show') instance."""
 
     def __init__(self, inst, kind, cfg):
-        self.id, self.name, self.kind = inst["id"], inst["name"], kind
+        self.id, self.name, self.kind, self.bin = inst["id"], inst["name"], kind, inst.get("bin") or ""
         self.base, self.key, self.cfg = inst["url"] + "/api/v3/", inst["key"], cfg
         self.resource = "movie" if kind == "movie" else "series"
         self.ext = "tmdbId" if kind == "movie" else "tvdbId"
@@ -388,6 +388,36 @@ def row_of(arr, m, index, also):
     return row
 
 
+def stamp_bin(bin_dir, item_path):
+    """Radarr / Sonarr empty their recycle bin by each file's own date. A whole title moved there keeps its old dates,
+    so it would be purged at the next clean-up instead of after the keep period. Give the files today's date so the
+    keep period really counts from the removal. Returns the number of files stamped."""
+    name = os.path.basename(os.path.normpath((item_path or "").replace("\\", "/")))
+    folder = os.path.join(bin_dir, name) if bin_dir and name not in ("", ".", "..") else ""     # never the bin itself
+    n = 0
+    if folder and os.path.isdir(folder):
+        for root, _dirs, files in os.walk(folder):
+            for f in files:
+                try:
+                    os.utime(os.path.join(root, f), None); n += 1
+                except OSError:
+                    pass
+    return n
+
+
+def imdb_ids(text, rated_only):
+    """IMDb ids from an IMDb export (ratings, watchlist or any list): the 'Const' column."""
+    rows = csv.DictReader(io.StringIO(text.lstrip("\ufeff")))
+    if not rows.fieldnames or "Const" not in rows.fieldnames:
+        raise ValueError("this is not an IMDb export (no 'Const' column)")
+    out = set()
+    for r in rows:
+        c = (r.get("Const") or "").strip()
+        if re.fullmatch(r"tt\d{5,10}", c) and (not rated_only or (r.get("Your Rating") or "").strip()):
+            out.add(c)
+    return out
+
+
 # -------------------------------------------------------------------------------------------------------------- app
 class App:
     def __init__(self, cfg, out=None):
@@ -441,36 +471,68 @@ class App:
         return len(items)
 
     # ---- Seen it
-    def process_seen(self):
-        todo = self.store.pending("seen")
-        if not todo:
-            return 0
-        d, rows, index, ok = self.store.decisions(), {r["k"]: r for r in self.items}, self.plex_index(), []
-        by_srv = {p.id: p for p in self.plexes}
-        for k in todo:
-            label = f"{d[k].get('title')} ({d[k].get('year')})"
+    def mark_played(self, keys):
+        """Mark these list keys played in Plex (every copy on every Plex server). Returns ({key: label} done, {key: reason} failed)."""
+        rows, index, by_srv = {r["k"]: r for r in self.items}, self.plex_index(), {p.id: p for p in self.plexes}
+        ok, failed = {}, {}
+        for k in keys:
+            row = rows.get(k)
+            label = f"{row['t']} ({row['y']})" if row else k
             try:
-                row = rows.get(k)
                 if row is None:
                     raise ApiError("it is no longer in the list")
-                kind, hits = row["kind"], {}
-                ids = [f"{s}:{row[f]}" for s, f in (("tmdb", "tmdb"), ("tvdb", "tvdb"), ("imdb", "imdb")) if row.get(f)]
-                for i in ids:
+                hits = {}
+                for i in [f"{s}:{row[f]}" for s, f in (("tmdb", "tmdb"), ("tvdb", "tvdb"), ("imdb", "imdb")) if row.get(f)]:
                     for e in index.get(i, ()):
-                        if e["kind"] == kind:
+                        if e["kind"] == row["kind"]:
                             hits[(e["srv"], e["rk"])] = e
                 if not hits:
                     raise ApiError("Plex has no item with that id")
                 for (srv, rk) in hits:
                     by_srv[srv].mark_played(rk)
-                ok.append(k); self.log(f"marked played in Plex: {label}")
+                ok[k] = label; self.log(f"marked played in Plex: {label}")
             except ApiError as e:
-                self.log(f"FAILED to mark played {label}: {e}")
-                # not retried: the page shows the reason and the title counts as undecided again
-                self.store.update(lambda cur, k=k, e=e: cur[k].update(d="failed", error=str(e)[:200]) if k in cur else None)
+                failed[k] = str(e)[:200]; self.log(f"FAILED to mark played {label}: {e}")
+        return ok, failed
+
+    def process_seen(self):
+        todo = self.store.pending("seen")
+        if not todo:
+            return 0
+        ok, failed = self.mark_played(todo)
+        if failed:                # not retried: the page shows the reason and the title counts as undecided again
+            self.store.update(lambda cur: [cur[k].update(d="failed", error=e) for k, e in failed.items() if k in cur])
         if ok:
             self.store.update(lambda cur: [cur.pop(k, None) for k in ok if cur.get(k, {}).get("d") == "seen"])
         return len(ok)
+
+    def process_import(self):
+        """Titles queued by an IMDb import: mark them played. Marks (Delete / Keep) are left as they are."""
+        with self.store.lock:
+            todo = self.store.read("seen-queue.json", [])
+            if todo:
+                self.store.write("seen-queue.json", [])
+        if not todo:
+            return 0
+        ok, failed = self.mark_played(todo)
+        self.log(f"IMDb import: {len(ok)} marked played in Plex, {len(failed)} failed")
+        return len(ok)
+
+    def api_imdb(self, body):
+        if not self.plexes:
+            return 400, "no Plex server is configured", None
+        try:
+            ids = imdb_ids(str(body.get("csv") or ""), bool(body.get("ratedOnly")))
+        except (ValueError, csv.Error) as e:
+            return 400, str(e), None
+        hit = [r for r in self.items if r.get("imdb") in ids]
+        todo = [r["k"] for r in hit if r["inplex"] and not r["full"]]
+        if todo:
+            with self.store.lock:
+                self.store.write("seen-queue.json", sorted(set(self.store.read("seen-queue.json", [])) | set(todo)))
+            self.wake.set()
+        return 200, None, {"inFile": len(ids), "inLibrary": len(hit), "alreadyPlayed": sum(1 for r in hit if r["full"]),
+                           "notInPlex": sum(1 for r in hit if not r["inplex"]), "queued": len(todo)}
 
     # ---- Delete
     def process_delete(self, progress=None):
@@ -519,7 +581,10 @@ class App:
                         queues[b.id] = b.queue_map()
                     for qid in queues[b.id].get(lists[b.id][ext]["id"], []):
                         b.remove_queue(qid)
-                    b.delete(lists[b.id][ext]["id"]); del lists[b.id][ext]
+                    gone = lists[b.id].pop(ext)
+                    b.delete(gone["id"])
+                    if b.bin and cfg.delete_files:
+                        stamp_bin(b.bin, gone.get("path"))
                 if cfg.exclude and cfg.everywhere:
                     for b in group:
                         if b not in holders:
@@ -561,6 +626,8 @@ class App:
         acted = False
         if self.plexes and self.store.pending("seen"):
             acted = self.process_seen() > 0
+        if self.plexes and self.store.read("seen-queue.json", []):
+            acted = self.process_import() > 0 or acted
         if self.store.queued():
             started = int(time.time())
             self.store.write("status.json", {"state": "running", "at": started})
@@ -601,7 +668,8 @@ class App:
         d = self.store.decisions()
         return {"ok": True, "decisions": d, "pending": sum(1 for v in d.values() if v.get("d") == "delete" and not v.get("done")),
                 "queued": self.store.queued(), "status": self.store.read("status.json", {}) or None, "built": self.built,
-                "error": self.error, "dryRun": self.cfg.dry_run, "plex": bool(self.plexes)}
+                "error": self.error, "dryRun": self.cfg.dry_run, "plex": bool(self.plexes),
+                "importing": len(self.store.read("seen-queue.json", []))}
 
     def api_set(self, body):
         k, dec = body.get("k"), body.get("d")
@@ -713,7 +781,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(415, "send JSON")
         try:
             length = int(self.headers.get("Content-Length") or 0)
-            if not 0 <= length <= 10000:
+            if not 0 <= length <= (8_000_000 if path == "/api/imdb" else 10000):
                 return self.fail(413, "request too large")
             body = json.loads(self.rfile.read(length) or b"{}")
             if not isinstance(body, dict):
@@ -726,6 +794,10 @@ class Handler(BaseHTTPRequestHandler):
             code, err = app.api_run()
         elif path == "/api/cancel":
             app.store.queue(False); code, err = 200, None
+        elif path == "/api/imdb":
+            code, err, result = app.api_imdb(body)
+            if not err:
+                return self.send(200, dict(app.state(), imported=result))
         elif path == "/api/refresh":
             app.want_refresh = True; app.wake.set(); code, err = 200, None
         else:

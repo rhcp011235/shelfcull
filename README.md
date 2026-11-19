@@ -21,6 +21,8 @@ It is built for the library that grew faster than anyone watched it.
 - **Watch state from Plex**: how often you played it, when, and which other users played it. Filter by
   *never played by anyone*, *never played by me*, *watched*, or everything.
 - **Delete / Skip / Keep / Seen it**. *Seen it* marks the title as played in Plex, for things you watched somewhere else.
+- **Import from IMDb**: upload your IMDb ratings (or any IMDb list) export and everything on it that is in your library
+  is marked as played in Plex in one go.
 - **Look without deciding**: Previous / Next, arrow keys, swipe on a phone, or a poster wall.
 - **Several Radarr, Sonarr and Plex servers** at once. A film that is in both your HD and your 4K Radarr is removed from
   both.
@@ -37,6 +39,8 @@ cp .env.example .env        # then edit .env: URLs, API keys, a password
 mkdir -p data
 docker compose up -d --build
 ```
+
+Or use the published image, `ghcr.io/rhcp011235/shelfcull:latest`, in place of `build: .`.
 
 Open `http://<your-server>:8765/`.
 
@@ -80,6 +84,7 @@ Everything is an environment variable; `.env` in the working directory is read a
 |---|---|
 | `RADARR_1_URL`, `RADARR_1_API_KEY`, `RADARR_1_NAME` | A Radarr. Add `RADARR_2_...`, `RADARR_3_...` for more. `RADARR_URL` / `RADARR_API_KEY` without a number also works. |
 | `SONARR_1_URL`, `SONARR_1_API_KEY`, `SONARR_1_NAME` | A Sonarr, same pattern. Optional. |
+| `RADARR_1_RECYCLE_BIN`, `SONARR_1_RECYCLE_BIN` | Optional: the path where shelfcull can reach that instance's recycle bin (mount it into the container, writable). See *Undo* below. |
 | `PLEX_1_URL`, `PLEX_1_TOKEN`, `PLEX_1_NAME` | A Plex Media Server, same pattern. Optional: without Plex you still get the cards, Delete and Keep, but no watch state and no *Seen it*. |
 
 You need at least one Radarr or one Sonarr. Use the Plex **server owner's** token
@@ -117,6 +122,18 @@ You need at least one Radarr or one Sonarr. Use the Plex **server owner's** toke
 there (Settings > Media Management > Recycling Bin), files go to it; without one they are deleted for good. The
 exclusion can be removed under Settings > Import Lists > List Exclusions.
 
+**Recycle bin dates:** Radarr and Sonarr empty their bin by each file's own date, so a film you have had for two years
+is purged at the very next clean-up, not after the "keep N days" you set. If you give shelfcull the bin's path
+(`RADARR_1_RECYCLE_BIN=/bins/radarr`, with the bin folder mounted there), it sets the removed files' date to the
+moment of removal, so the keep period really counts from then.
+
+## Import from IMDb
+
+*Marked to delete* > **Import from IMDb**. On imdb.com open *Your ratings* (or a list), choose *Export*, and pick the
+downloaded `.csv`. Every title in the file that is in your library and not yet played is marked as played in Plex.
+"Only titles I rated" skips rows without your rating, which is what you want for a watchlist export. IMDb offers no
+way to read your ratings automatically, so this is a file you upload when you want to catch up.
+
 ## Security
 
 shelfcull can delete your library, so treat the page like the Radarr page itself:
@@ -138,7 +155,7 @@ shelfcull can delete your library, so treat the page like the Radarr page itself
 ## Development
 
 ```bash
-python3 -m unittest discover -s tests -v      # 18 tests against fake Radarr / Sonarr / Plex servers
+python3 -m unittest discover -s tests -v      # 21 tests against fake Radarr / Sonarr / Plex servers
 tests/run_ui_test.sh                          # browser test of the page; needs node, playwright-core and a Chromium
 ```
 

@@ -190,6 +190,58 @@ class SeenTests(Base):
         self.assertTrue(rows["r1:10"]["full"] and rows["s0:500"]["full"])
 
 
+class ImdbImportTests(Base):
+    CSV = ("\ufeffConst,Your Rating,Date Rated,Title\n" "tt0000010,8,2024-01-01,Alpha\n" "tt0000020,,,Beta\n" "tt0000030,6,2024-01-01,Not In Plex\n"
+           "tt0000040,9,2024-01-01,Already Seen\n" "tt9999999,7,2024-01-01,Not In Library\n" "tt0000500,7,2024-01-01,\"Gamma, the Show\"\n" "junk,1,,x\n")
+
+    def world(self):
+        self.r1.add(10, "Alpha", 2001); self.r1.add(20, "Beta", 2002); self.r1.add(30, "Not In Plex", 2003); self.r2.add(40, "Already Seen", 2004)
+        self.s1.add(500, "Gamma, the Show", 2015)
+        self.m10 = self.plex.add_movie(10, "Alpha"); self.m20 = self.plex.add_movie(20, "Beta"); self.plex.add_movie(40, "Already Seen", plays=1, last=5)
+        self.show = self.plex.add_show(500, "Gamma, the Show", episodes=10, watched=2)
+        a = self.app(); a.build()
+        return a
+
+    def test_rated_only_marks_played_and_keeps_marks(self):
+        a = self.world(); self.mark(a, "r1:10", "keep", "Alpha", 2001)
+        code, err, res = a.api_imdb({"csv": self.CSV, "ratedOnly": True})
+        self.assertEqual((code, err), (200, None))
+        self.assertEqual(res, {"inFile": 5, "inLibrary": 4, "alreadyPlayed": 1, "notInPlex": 1, "queued": 2})
+        self.assertEqual(a.state()["importing"], 2)
+        self.assertEqual(a.process_import(), 2)
+        self.assertEqual((self.m10.get("viewCount"), self.m20.get("viewCount"), self.show["viewedLeafCount"]), (1, None, 10))
+        self.assertEqual(a.store.decisions()["r1:10"]["d"], "keep", "a Keep mark survives the import")
+        self.assertEqual((a.state()["importing"], a.process_import()), (0, 0))
+        self.assertEqual((self.r1.deleted, self.s1.deleted), ([], []))
+
+    def test_whole_list_and_bad_files(self):
+        a = self.world()
+        self.assertEqual(a.api_imdb({"csv": self.CSV, "ratedOnly": False})[2]["queued"], 3)
+        a.process_import(); self.assertEqual(self.m20.get("viewCount"), 1)
+        self.assertEqual(a.api_imdb({"csv": "Title,Year\nAlpha,2001\n"})[:2], (400, "this is not an IMDb export (no 'Const' column)"))
+        self.assertEqual(a.api_imdb({"csv": ""})[0], 400)
+        self.assertEqual(a.api_imdb({})[0], 400)
+
+
+class RecycleBinTests(Base):
+    def test_removed_folder_in_the_bin_gets_todays_date(self):
+        bin1 = os.path.join(self.tmp, "bin"); folder = os.path.join(bin1, "Alpha (2001)", "Subs"); os.makedirs(folder)
+        old = time.time() - 400 * 86400
+        files = [os.path.join(bin1, "Alpha (2001)", "Alpha.mkv"), os.path.join(folder, "Alpha.en.srt")]
+        other = os.path.join(bin1, "Other (1999)"); os.makedirs(other); files.append(os.path.join(other, "Other.mkv"))
+        for f in files:
+            open(f, "w").close(); os.utime(f, (old, old))
+        self.r1.add(10, "Alpha", 2001, path="/movies/Alpha (2001)"); self.r2.add(10, "Alpha", 2001, path="/movies4k/Alpha (2001)")
+        a = self.app(RADARR_1_RECYCLE_BIN=bin1, PLEX_URL=None, PLEX_TOKEN=None); a.build()
+        self.mark(a, "r1:10", "delete", "Alpha", 2001)
+        self.assertEqual(a.process_delete()["removed"], 1)
+        age = lambda f: time.time() - os.path.getmtime(f)
+        self.assertTrue(age(files[0]) < 60 and age(files[1]) < 60, "the removed title's files count from today")
+        self.assertTrue(age(files[2]) > 399 * 86400, "other titles in the bin are not touched")
+        self.assertEqual(sc.stamp_bin("", "/movies/Alpha (2001)"), 0); self.assertEqual(sc.stamp_bin(bin1, ""), 0)
+        self.assertEqual(sc.stamp_bin(bin1, "C:\\Movies\\Other (1999)"), 1, "Windows-style paths work")
+
+
 class HttpTests(Base):
     def start(self, **extra):
         self.r1.add(10, "Alpha", 2001, size=5 * 2**30); self.r2.add(20, "Beta", 2002); self.plex.add_movie(10, "Alpha")
@@ -235,6 +287,10 @@ class HttpTests(Base):
         self.assertEqual(self.http("/api/set", [1])[0], 400)
         self.assertEqual(self.http("/api/set", {"k": "r1:10", "d": "delete"}, {"Content-Type": "text/plain"})[0], 415)
         self.assertEqual(self.http("/api/set", {"k": "r1:10", "d": "delete"}, {"Origin": "http://evil.example"})[0], 403)
+        code, st, _ = self.http("/api/imdb", {"csv": "Const,Your Rating\ntt0000010,7\ntt0000020,\n", "ratedOnly": True})
+        self.assertEqual((code, st["imported"]["queued"], st["imported"]["inFile"]), (200, 1, 1))
+        self.wait(lambda: self.plex.items["1"][0].get("viewCount") == 1, "the import to mark Plex")
+        self.assertEqual(self.http("/api/set", {"k": "r1:10", "d": "keep", "pad": "x" * 20000})[0], 413)
         self.assertEqual(self.http("/api/state")[1]["decisions"], {})
         code, st, _ = self.http("/api/set", {"k": "r1:10", "d": "delete", "title": "Alpha", "year": 2001}, {"Origin": self.base})
         self.assertEqual((code, st["pending"]), (200, 1))

@@ -1,7 +1,7 @@
 services:
   shelfcull:
     build: .
-    # image: ghcr.io/OWNER/shelfcull:latest    # if you publish an image, use it here and drop "build"
+    # image: ghcr.io/rhcp011235/shelfcull:latest    # the published image; use it here and drop "build"
     container_name: shelfcull
     restart: unless-stopped
     env_file: .env                 # copy .env.example to .env and fill it in
@@ -9,4 +9,5 @@ services:
       - "8765:8765"
     volumes:
       - ./data:/data               # your marks live here; must be writable by uid 1000 (or set "user:" below)
+      # - /path/to/radarr/recycle-bin:/bins/radarr     # optional, with RADARR_1_RECYCLE_BIN=/bins/radarr
     # user: "1000:1000"

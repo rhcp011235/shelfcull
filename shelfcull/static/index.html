@@ -55,7 +55,17 @@
     <div class="tabs">
       <button id="tabDel" class="on">Marked to delete</button>
       <button id="tabKeep">Marked keep</button>
+      <button id="tabImdb">Import from IMDb</button>
       <button id="back">Back to the list</button>
+    </div>
+    <div id="imdbBox" class="hide">
+      <p class="plot">Mark everything from an IMDb export as played in Plex, for titles you watched somewhere else.</p>
+      <p class="facts">On imdb.com open <b>Your ratings</b> (or your watchlist, or any list), choose <b>Export</b>, and pick the downloaded .csv file here.
+        Only titles that are in your library and not yet played are touched. Your Delete and Keep marks stay as they are.</p>
+      <p><label><input type="checkbox" id="imdbRated" checked> Only titles I rated</label></p>
+      <p><input type="file" id="imdbFile" accept=".csv,text/csv"></p>
+      <button class="big quiet" id="imdbGo" disabled>Mark as played in Plex</button>
+      <div id="imdbResult"></div>
     </div>
     <div id="runBox"></div>
     <div class="list" id="list"></div>
