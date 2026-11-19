@@ -14,6 +14,8 @@ const { chromium } = require(process.env.PLAYWRIGHT || 'playwright-core');
     let posts = 0; p.on('request', r => { if (r.method() === 'POST') posts++; });
     await p.goto(base); await p.waitForSelector('.title');
     const T = () => p.textContent('.title');
+    ok(label + ': opens on the configured view (All movies) and shows no TV', (await p.inputValue('#fLib')) === 'kind:movie' && await p.evaluate(() => queue.length > 0 && queue.every(f => f.kind === 'movie')));
+    ok(label + ': a film card has no whole-show box', !(await p.$('.whole')));
     ok(label + ': library filter lists both kinds and all three instances', (await p.$$eval('#fLib option', o => o.map(x => x.textContent))).join('|') === 'Everything|All movies|All TV shows|Movies HD|Movies 4K|TV');
     ok(label + ': poster is shown (data URL allowed by the page policy)', await p.waitForFunction(() => document.getElementById('poster').style.backgroundImage.startsWith('url("data:image/svg'), null, { timeout: 5000 }).then(() => true, () => false));
     // looking through without deciding
@@ -28,6 +30,7 @@ const { chromium } = require(process.env.PLAYWRIGHT || 'playwright-core');
     // TV shows
     await p.selectOption('#fLib', 'kind:show'); await p.selectOption('#fPlay', 'all'); await p.waitForFunction(() => queue.length && queue.every(f => f.kind === 'show'));
     ok(label + ': TV shows have their own cards (seasons, episodes)', /season/.test(await p.textContent('.facts')) && (await p.textContent('.tags')).includes('TV show'));
+    ok(label + ': a TV card says what Delete removes, with a line per season', /Delete removes the whole show: \d+ episodes? in \d+ seasons?, [\d.]+ (GB|TB)/.test(await p.textContent('.whole')) && /Season 1: \d+ episodes? · [\d.]+ (GB|TB)/.test(await p.textContent('.whole li')));
     const partly = await p.evaluate(() => { const i = queue.findIndex(f => f.n > 0 && !f.full); if (i < 0) return false; pos = i; show(); return true; });
     ok(label + ': a partly watched show says how many episodes', partly && /You watched \d+ of \d+ episodes/.test(await p.textContent('.tags')) && !(await p.isDisabled('#bSeen')));
     const fully = await p.evaluate(() => { const i = queue.findIndex(f => f.full); if (i < 0) return false; pos = i; show(); return true; });

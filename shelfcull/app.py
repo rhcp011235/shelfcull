@@ -106,6 +106,9 @@ class Config:
         self.plex_scan = _bool(env, "PLEX_SCAN_AFTER_DELETE", True)
         self.plex_empty_trash = _bool(env, "PLEX_EMPTY_TRASH", False)
         self.refresh_minutes = _int(env, "REFRESH_MINUTES", 60, 1, 10080)
+        self.default_view = env.get("DEFAULT_VIEW", "").strip().lower() or "all"
+        if self.default_view not in ("all", "movies", "shows"):
+            raise ConfigError("DEFAULT_VIEW must be all, movies or shows")
         self.timeout = _int(env, "HTTP_TIMEOUT", 120, 5, 3600)
         self.tls = None if _bool(env, "VERIFY_TLS", True) else ssl._create_unverified_context()
 
@@ -382,6 +385,9 @@ def row_of(arr, m, index, also):
     else:
         s = m.get("statistics") or {}
         seasons, eps = s.get("seasonCount") or 0, s.get("episodeFileCount") or 0
+        per = [[x.get("seasonNumber"), (x.get("statistics") or {}).get("episodeFileCount") or 0, (x.get("statistics") or {}).get("sizeOnDisk") or 0]
+               for x in sorted(m.get("seasons") or [], key=lambda x: x.get("seasonNumber") or 0)]
+        row.update(seas=[x for x in per if x[1] > 0], nseas=seasons, neps=eps)
         row.update(tvdb=m["tvdbId"], ot="", ri=0, rv=r.get("votes") or 0, rx=r.get("value") or 0, st=m.get("network") or "",
                    q=f"{seasons} season{'' if seasons == 1 else 's'}, {eps} episode{'' if eps == 1 else 's'}"
                      + (", ended" if m.get("status") == "ended" else ""), ad=local_date(m.get("added")), yt="")
@@ -761,7 +767,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/state":
             return self.send(200, app.state())
         if path == "/api/items":
-            return self.send(200, {"built": app.built, "items": app.items, "instances": app.instances(), "version": __version__})
+            return self.send(200, {"built": app.built, "items": app.items, "instances": app.instances(), "version": __version__,
+                                   "defaultView": app.cfg.default_view})
         name = {"/": "index.html", "/index.html": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/icon.svg": "icon.svg"}.get(path)
         if not name:
             return self.fail(404, "not found")

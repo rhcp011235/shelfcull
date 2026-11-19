@@ -51,6 +51,7 @@ class ConfigTests(unittest.TestCase):
                           ({"RADARR_URL": "a:7878", "RADARR_API_KEY": "x"}, "must start with http"),
                           ({"RADARR_URL": "http://a", "RADARR_API_KEY": "x", "DRY_RUN": "maybe"}, "DRY_RUN must be true or false"),
                           ({"RADARR_URL": "http://a", "RADARR_API_KEY": "x", "PORT": "99999"}, "PORT must be a number"),
+                          ({"RADARR_URL": "http://a", "RADARR_API_KEY": "x", "DEFAULT_VIEW": "tv"}, "DEFAULT_VIEW must be"),
                           ({"RADARR_URL": "http://a", "RADARR_API_KEY": "x", "PLEX_URL": "http://p"}, "PLEX_TOKEN is missing")):
             with self.assertRaises(sc.ConfigError) as cm:
                 sc.Config(env)
@@ -93,6 +94,7 @@ class BuildTests(Base):
         self.assertEqual((g["kind"], g["n"], g["eps"], g["full"], g["oth"], g["q"], g["tvdb"]), ("show", 5, 20, False, ["guest"], "2 seasons, 20 episodes, ended", 500))
         with open(os.path.join(self.tmp, "items.json")) as f:
             self.assertEqual(json.load(f)["built"], a.built)
+        self.assertEqual((g["seas"], g["nseas"], g["neps"]), ([[1, 12, 18 * 2**30], [2, 8, 12 * 2**30]], 2, 20), "per-season sizes; empty seasons left out")
 
     def test_no_plex_configured(self):
         self.r1.add(10, "Alpha", 2001)
@@ -276,7 +278,7 @@ class HttpTests(Base):
         self.wait(lambda: self.http("/api/items")[1]["built"], "the first list")
         code, items, _ = self.http("/api/items")
         self.assertEqual(sorted(i["k"] for i in items["items"]), ["r1:10", "r2:20"])
-        self.assertEqual([i["name"] for i in items["instances"]], ["HD", "4K", "Sonarr"])
+        self.assertEqual([i["name"] for i in items["instances"]], ["HD", "4K", "Sonarr"]); self.assertEqual(items["defaultView"], "all")
         for path, ctype in (("/", "text/html"), ("/app.js", "text/javascript"), ("/style.css", "text/css"), ("/icon.svg", "image/svg+xml")):
             code, _raw, hdr = self.http(path)
             self.assertEqual(code, 200); self.assertTrue(hdr["Content-Type"].startswith(ctype)); self.assertIn("default-src 'self'", hdr["Content-Security-Policy"])

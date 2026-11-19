@@ -5,7 +5,7 @@ const gb = b => b >= 1099511627776 ? (b / 1099511627776).toFixed(2) + " TB" : (b
 const day = t => t ? new Date(t * 1000).toLocaleDateString(undefined, {year: "numeric", month: "short", day: "numeric"}) : "";
 const safeUrl = u => /^(https?:|data:image\/)/i.test(u || "") ? u : "";
 
-let items = [], byKey = {}, instances = [], dec = {}, queue = [], pos = 0, undo = [], skipped = new Set(), tab = "delete",
+let defaultView = "all", items = [], byKey = {}, instances = [], dec = {}, queue = [], pos = 0, undo = [], skipped = new Set(), tab = "delete",
     serverState = {}, pollTimer = 0, current = "pick", shown = 0, hasPlex = true;
 
 function banner(text, kind) { $("banner").innerHTML = text ? `<div class="msg ${kind || ""}">${esc(text)}</div>` : ""; }
@@ -87,6 +87,8 @@ function show() {
       <p class="sub">${sub}</p>
       <div class="tags">${tags}</div>
       <p class="plot">${esc(f.ov || "No description available.")}</p>
+      ${f.kind === "show" ? `<div class="whole"><b>Delete removes the whole show: ${f.neps} episode${f.neps === 1 ? "" : "s"} in ${f.nseas} season${f.nseas === 1 ? "" : "s"}, ${gb(f.sz)}</b>` +
+        `<ul>${(f.seas || []).map(x => `<li>${x[0] === 0 ? "Specials" : "Season " + x[0]}: ${x[1]} episode${x[1] === 1 ? "" : "s"} &middot; ${gb(x[2])}</li>`).join("")}</ul></div>` : ""}
       <p class="facts">${esc(f.srcn)} &middot; ${esc(f.q)} &middot; ${gb(f.sz)} &middot; in your library since ${esc(f.ad)}${f.st ? " &middot; " + esc(f.st) : ""}${f.also && f.also.length ? "<br>Also in " + esc(f.also.join(", ")) + ". Delete removes it there too." : ""}</p>
       <p class="links">${links}</p>
     </div>`;
@@ -149,7 +151,7 @@ async function reloadItems() {
   const r = await fetch("api/items", {cache: "no-store"});
   if (!r.ok) throw new Error("The list could not be loaded (HTTP " + r.status + ")");
   const j = await r.json();
-  items = j.items || []; instances = j.instances || []; byKey = {}; items.forEach(f => byKey[f.k] = f);
+  items = j.items || []; instances = j.instances || []; byKey = {}; items.forEach(f => byKey[f.k] = f); defaultView = j.defaultView || "all";
   return j;
 }
 
@@ -205,7 +207,10 @@ function setupFilters() {
   let h = `<option value="">Everything</option>`;
   if (kinds.size > 1) h += `<option value="kind:movie">All movies</option><option value="kind:show">All TV shows</option>`;
   if (instances.length > 1) h += instances.map(i => `<option value="${esc(i.id)}">${esc(i.name)}</option>`).join("");
+  const was = $("fLib").value, first = !$("fLib").options.length;
   $("fLib").innerHTML = h;
+  const want = first ? ({movies: "kind:movie", shows: "kind:show"}[defaultView] || "") : was;      // the configured opening view, once
+  if ([...$("fLib").options].some(o => o.value === want)) $("fLib").value = want;
   $("fLib").classList.toggle("hide", instances.length < 2);
   $("fPlay").classList.toggle("hide", !hasPlex);
   $("bSeen").classList.toggle("hide", !hasPlex); $("tabImdb").classList.toggle("hide", !hasPlex);

@@ -51,7 +51,10 @@ def fill(rnd):
         s = tv.add(5000 + i, t, rnd.randint(1995, 2025), size=eps * rnd.randint(1, 4) * 2**30,
                    images=[{"coverType": "poster", "remoteUrl": poster(t, rnd.randrange(360))}], genres=rnd.sample(GENRES, 2), runtime=rnd.choice([22, 44, 58]),
                    overview="An invented series for the shelfcull demo.", status=rnd.choice(["ended", "continuing"]))
-        s["statistics"].update(seasonCount=max(1, eps // 10), episodeFileCount=eps)
+        ns = max(1, eps // 10)
+        s["statistics"].update(seasonCount=ns, episodeFileCount=eps)
+        s["seasons"] = [{"seasonNumber": n + 1, "statistics": {"episodeFileCount": eps // ns + (eps % ns if n == 0 else 0),
+                                                              "sizeOnDisk": s["statistics"]["sizeOnDisk"] // ns}} for n in range(ns)]
         plex.add_show(5000 + i, t, episodes=eps, watched=rnd.choice([0, 0, eps // 3, eps]), last=rnd.randint(1600000000, 1760000000))
     return hd, uhd, tv, plex
 
@@ -70,7 +73,7 @@ def start(port=8765, data_dir=None, seed=7, **extra):
 
 
 if __name__ == "__main__":
-    app, srv, _fakes = start(int(os.environ.get("PORT", "8765")))
+    app, srv, _fakes = start(int(os.environ.get("PORT", "8765")), DEFAULT_VIEW=os.environ.get("DEMO_DEFAULT_VIEW", "all"))
     print(f"shelfcull demo with invented titles: http://127.0.0.1:{srv.server_address[1]}/   (Ctrl-C stops it)")
     try:
         srv.serve_forever()

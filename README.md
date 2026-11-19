@@ -26,7 +26,7 @@ It is built for the library that grew faster than anyone watched it.
 - **Look without deciding**: Previous / Next, arrow keys, swipe on a phone, or a poster wall.
 - **Several Radarr, Sonarr and Plex servers** at once. A film that is in both your HD and your 4K Radarr is removed from
   both.
-- **TV shows** through Sonarr, removed as whole series.
+- **TV shows** through Sonarr, removed as whole series; the card says how many episodes and GB that is, season by season.
 - **Nothing is deleted until you press Remove** and confirm. A dry-run mode shows what would happen first.
 - One small container, Python standard library only, no database. Your marks are a JSON file.
 
@@ -103,6 +103,7 @@ You need at least one Radarr or one Sonarr. Use the Plex **server owner's** toke
 | `ALL_INSTANCES` | `true` | Remove a title from every Radarr (or every Sonarr) that has it, and exclude it in all of them. `false`: only the instance you marked it in. |
 | `PLEX_SCAN_AFTER_DELETE` | `true` | Ask Plex to scan its movie / TV libraries after a removal. |
 | `PLEX_EMPTY_TRASH` | `false` | Empty the Plex trash of those libraries when the scan has finished. |
+| `DEFAULT_VIEW` | `all` | What the page opens on when you have both films and TV: `all`, `movies` or `shows`. |
 | `REFRESH_MINUTES` | `60` | How often the list is rebuilt. New downloads appear after a rebuild. |
 | `LISTEN` / `PORT` | `0.0.0.0` / `8765` | Where the page listens. |
 | `DATA_DIR` | `./data` (`/data` in Docker) | Where your marks, the cached list and the log are kept. |

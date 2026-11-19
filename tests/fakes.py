@@ -66,7 +66,10 @@ class FakeArr(Fake):
                 m["movieFile"] = {"size": size, "dateAdded": "2024-01-02T03:04:05Z", "quality": {"quality": {"name": "Bluray-1080p"}}}
         else:
             m.update(imdbId=f"tt{ext_id:07d}", network="Fake TV", status="ended", ratings={"value": 7.2, "votes": 300},
-                     statistics={"seasonCount": 2, "episodeFileCount": 20 if files else 0, "sizeOnDisk": size if files else 0})
+                     statistics={"seasonCount": 2, "episodeFileCount": 20 if files else 0, "sizeOnDisk": size if files else 0},
+                     seasons=[{"seasonNumber": 0, "statistics": {"episodeFileCount": 0, "sizeOnDisk": 0}},
+                              {"seasonNumber": 1, "statistics": {"episodeFileCount": 12 if files else 0, "sizeOnDisk": size * 3 // 5 if files else 0}},
+                              {"seasonNumber": 2, "statistics": {"episodeFileCount": 8 if files else 0, "sizeOnDisk": size * 2 // 5 if files else 0}}])
         m.update(extra)
         self._next += 1
         self.items.append(m)
