@@ -87,7 +87,7 @@ function show() {
       <p class="sub">${sub}</p>
       <div class="tags">${tags}</div>
       <p class="plot">${esc(f.ov || "No description available.")}</p>
-      ${f.kind === "show" ? `<div class="whole"><b>Delete removes the whole show: ${f.neps} episode${f.neps === 1 ? "" : "s"} in ${f.nseas} season${f.nseas === 1 ? "" : "s"}, ${gb(f.sz)}</b>` +
+      ${f.kind === "show" && f.neps ? `<div class="whole"><b>Delete removes the whole show: ${f.neps} episode${f.neps === 1 ? "" : "s"} in ${f.nseas} season${f.nseas === 1 ? "" : "s"}, ${gb(f.sz)}</b>` +
         `<ul>${(f.seas || []).map(x => `<li>${x[0] === 0 ? "Specials" : "Season " + x[0]}: ${x[1]} episode${x[1] === 1 ? "" : "s"} &middot; ${gb(x[2])}</li>`).join("")}</ul></div>` : ""}
       <p class="facts">${esc(f.srcn)} &middot; ${esc(f.q)} &middot; ${gb(f.sz)} &middot; in your library since ${esc(f.ad)}${f.st ? " &middot; " + esc(f.st) : ""}${f.also && f.also.length ? "<br>Also in " + esc(f.also.join(", ")) + ". Delete removes it there too." : ""}</p>
       <p class="links">${links}</p>

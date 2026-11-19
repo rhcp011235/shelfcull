@@ -434,6 +434,8 @@ class App:
         self.out = out or self._print
         saved = self.store.read("items.json", {})
         self.items, self.built = saved.get("items") or [], saved.get("built") or 0
+        if saved.get("v") != __version__:
+            self.built = 0                      # a list cached by another version may lack fields: rebuild it right away
         self.error, self.next_build, self.want_refresh = "", 0, False
         self.wake, self.stop = threading.Event(), threading.Event()
         self.scan_poll, self.scan_start_wait, self.scan_max_wait = 5, 60, 900
@@ -473,7 +475,7 @@ class App:
                 if m.get(a.ext) and has_files(a.kind, m):
                     items.append(row_of(a, m, index, [n for n, ids in held.items() if m[a.ext] in ids]))
         self.items, self.built, self.error = items, int(time.time()), ""
-        self.store.write("items.json", {"built": self.built, "items": items})
+        self.store.write("items.json", {"built": self.built, "v": __version__, "items": items})
         return len(items)
 
     # ---- Seen it

@@ -111,6 +111,24 @@ class BuildTests(Base):
         self.assertIn("HTTP 401", str(cm.exception)); self.assertNotIn("wrong-key", str(cm.exception))
 
 
+class CacheTests(Base):
+    def test_list_cached_by_another_version_is_rebuilt_at_once(self):
+        self.r1.add(10, "Alpha", 2001)
+        a = self.app(PLEX_URL=None, PLEX_TOKEN=None); a.build()
+        again = self.app(PLEX_URL=None, PLEX_TOKEN=None)
+        self.assertEqual((len(again.items), again.built), (1, a.built), "same version: the cached list is used")
+        p = os.path.join(self.tmp, "items.json")
+        with open(p) as f:
+            d = json.load(f)
+        d["v"] = "0.0.1"
+        with open(p, "w") as f:
+            json.dump(d, f)
+        old = self.app(PLEX_URL=None, PLEX_TOKEN=None)
+        self.assertEqual((len(old.items), old.built), (1, 0), "other version: shown meanwhile, rebuilt on the first tick")
+        old.tick()
+        self.assertTrue(old.built > 0)
+
+
 class DeleteTests(Base):
     def world(self, **extra):
         self.r1.add(10, "Alpha", 2001, size=5 * 2**30); self.r1.add(30, "Gamma: Part Two", 2003, size=2**30); self.r1.add(50, "Keeper", 2005)

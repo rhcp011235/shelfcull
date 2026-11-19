@@ -156,7 +156,7 @@ shelfcull can delete your library, so treat the page like the Radarr page itself
 ## Development
 
 ```bash
-python3 -m unittest discover -s tests -v      # 21 tests against fake Radarr / Sonarr / Plex servers
+python3 -m unittest discover -s tests -v      # 22 tests against fake Radarr / Sonarr / Plex servers
 tests/run_ui_test.sh                          # browser test of the page; needs node, playwright-core and a Chromium
 ```
 
